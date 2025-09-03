@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>管理员面板</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
+    .container { max-width: 800px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 30px; color: white; }
+    header h1 { font-size: 2.5rem; margin: 0 0 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+    .card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
+    h2 { margin-top: 0; }
+    input, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; }
+    button { background: #3498db; color: white; cursor: pointer; border: none; transition: background-color 0.2s; }
+    button:hover { background: #2980b9; }
+    /* --- 新增：警告按钮样式 --- */
+    button.warning { background-color: #e67e22; }
+    button.warning:hover { background-color: #d35400; }
+    .info { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+    .muted { color: #777; font-size: 0.9em; }
+    .setting-group { margin-bottom: 15px; }
+    .setting-group label { font-weight: bold; display: block; margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header><h1>🔐 管理员面板</h1></header>
+
+  <section class="card" id="loginCard">
+    <h2>登录</h2>
+    <input id="adminPassword" type="password" placeholder="管理员密码" />
+    <button id="btnLogin">登录</button>
+    <div id="loginMsg"></div>
+  </section>
+
+  <div id="mainContent" style="display:none;">
+    <section class="card">
+      <h2>⚙️ 每日重置设置</h2>
+      <p class="muted">设置每日 00:00 (UTC+8) 自动为 'vip' 和 'default' 组用户重置的配额。</p>
+      
+      <div class="setting-group">
+        <label for="resetQuotaVip">VIP 组重置配额</label>
+        <div class="info">当前: <strong id="currentResetQuotaVip">加载中...</strong></div>
+        <input id="resetQuotaVip" type="number" placeholder="为 VIP 用户设置每日重置配额" />
+      </div>
+
+      <div class="setting-group">
+        <label for="resetQuotaDefault">Default 组重置配额</label>
+        <div class="info">当前: <strong id="currentResetQuotaDefault">加载中...</strong></div>
+        <input id="resetQuotaDefault" type="number" placeholder="为 Default 用户设置每日重置配额" />
+      </div>
+
+      <button id="btnSaveResetSetting">保存所有设置</button>
+      <!-- --- 新增：立即重置按钮 --- -->
+      <button id="btnTriggerResetNow" class="warning">立即重置所有用户</button>
+    </section>
+
+    <section class="card">
+      <h2>👤 用户管理</h2>
+      <input id="userId" type="number" placeholder="输入用户 ID 进行查询和操作" />
+      <button id="btnLoadUser">加载用户信息</button>
+      <div class="info" id="userInfo">请先加载用户</div>
+      <h3>修改分组</h3>
+      <input id="newGroup" placeholder="新分组 (例如: vip, default)" />
+      <button id="btnUpdateGroup">更新分组</button>
+      <h3>增加配额 (立即生效)</h3>
+      <input id="quotaDelta" type="number" placeholder="要增加的额度 (单位)" />
+      <button id="btnIncrementQuota">增加配额</button>
+      <h3>重置配额 (立即生效)</h3>
+      <input id="resetQuota" type="number" placeholder="将配额重置为此值 (单位)" />
+      <button id="btnResetQuota">重置配额</button>
+    </section>
+  </div>
+</div>
+
+<script>
+const API = location.origin;
+let adminToken = localStorage.getItem('adminToken');
+
+async function apiCall(url, options = {}) {
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}`, ...options.headers };
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `HTTP error! status: ${response.status}`);
+  }
+  // 某些POST请求可能没有JSON返回体
+  const contentType = response.headers.get("content-type");
+  if (contentType && contentType.indexOf("application/json") !== -1) {
+    return response.json();
+  }
+  return {};
+}
+
+async function loadSettings() {
+  try {
+    const data = await apiCall(`${API}/api/admin/settings/daily_reset`);
+    document.getElementById('currentResetQuotaVip').textContent = data.vip_quota.toLocaleString();
+    document.getElementById('resetQuotaVip').value = data.vip_quota;
+    document.getElementById('currentResetQuotaDefault').textContent = data.default_quota.toLocaleString();
+    document.getElementById('resetQuotaDefault').value = data.default_quota;
+  } catch (e) {
+    document.getElementById('currentResetQuotaVip').textContent = '加载失败';
+    document.getElementById('currentResetQuotaDefault').textContent = '加载失败';
+  }
+}
+
+document.getElementById('btnSaveResetSetting').addEventListener('click', async () => {
+  const vipQuota = parseInt(document.getElementById('resetQuotaVip').value, 10);
+  const defaultQuota = parseInt(document.getElementById('resetQuotaDefault').value, 10);
+  if (isNaN(vipQuota) || isNaN(defaultQuota) || vipQuota < 0 || defaultQuota < 0) {
+    alert('请输入有效的非负整数作为配额。'); return;
+  }
+  try {
+    await apiCall(`${API}/api/admin/settings/daily_reset`, {
+      method: 'POST', body: JSON.stringify({ vip_quota: vipQuota, default_quota: defaultQuota })
+    });
+    alert('✅ 设置已保存！'); loadSettings();
+  } catch (e) { alert('❌ 保存失败：' + e.message); }
+});
+
+// --- 新增：立即重置按钮的事件监听 ---
+document.getElementById('btnTriggerResetNow').addEventListener('click', async () => {
+  const confirmation = confirm(
+    "您确定要立即为所有 'vip' 和 'default' 组用户重置配额吗？\n\n此操作将使用当前保存的设置，且无法撤销。"
+  );
+  if (!confirmation) {
+    return;
+  }
+  try {
+    const btn = document.getElementById('btnTriggerResetNow');
+    btn.disabled = true;
+    btn.textContent = '正在重置...';
+    await apiCall(`${API}/api/admin/actions/trigger_daily_reset`, { method: 'POST' });
+    alert('✅ 立即重置任务已成功触发！请在后台查看日志确认执行情况。');
+    btn.disabled = false;
+    btn.textContent = '立即重置所有用户';
+  } catch (e) {
+    alert('❌ 触发失败：' + e.message);
+    btn.disabled = false;
+    btn.textContent = '立即重置所有用户';
+  }
+});
+
+document.getElementById('btnLogin').addEventListener('click', async () => {
+  const pwd = document.getElementById('adminPassword').value.trim();
+  if (!pwd) { alert('请输入管理员密码'); return; }
+  try {
+    const resp = await apiCall(`${API}/api/admin/login`, {
+      method: 'POST', body: JSON.stringify({ password: pwd })
+    });
+    adminToken = resp.token;
+    localStorage.setItem('adminToken', adminToken);
+    document.getElementById('loginCard').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+    loadSettings();
+  } catch (e) { document.getElementById('loginMsg').innerText = '❌ 登录失败：' + e.message; }
+});
+
+// ... 其他用户管理部分的JS保持不变 ...
+document.getElementById('btnLoadUser').addEventListener('click', async () => {
+  const id = document.getElementById('userId').value.trim();
+  if (!id) { alert('请输入用户 ID'); return; }
+  const userInfoDiv = document.getElementById('userInfo');
+  try {
+    const user = await apiCall(`${API}/api/admin/user/${id}`);
+    userInfoDiv.innerHTML = `<div><strong>ID:</strong> ${user.id}</div><div><strong>用户名:</strong> ${user.username}</div><div><strong>分组:</strong> ${user.group}</div><div><strong>配额:</strong> ${user.quota.toLocaleString()}</div><div><strong>已用配额:</strong> ${user.used_quota.toLocaleString()}</div>`;
+  } catch (e) { userInfoDiv.innerText = '❌ 加载失败：' + e.message; }
+});
+async function handleUserAction(url, payload, successMsg) {
+  if (!document.getElementById('userId').value) { alert('请先加载一个用户。'); return; }
+  try {
+    await apiCall(url, { method: 'POST', body: JSON.stringify(payload) });
+    alert(successMsg);
+    document.getElementById('btnLoadUser').click();
+  } catch (e) { alert('❌ 操作失败：' + e.message); }
+}
+document.getElementById('btnUpdateGroup').addEventListener('click', () => {
+  const id = parseInt(document.getElementById('userId').value);
+  const group = document.getElementById('newGroup').value.trim();
+  if (!group) { alert('请输入新分组'); return; }
+  handleUserAction(`${API}/api/admin/user/group`, { user_id: id, group }, '✅ 分组更新成功');
+});
+document.getElementById('btnIncrementQuota').addEventListener('click', () => {
+  const id = parseInt(document.getElementById('userId').value);
+  const delta = parseInt(document.getElementById('quotaDelta').value);
+  if (isNaN(delta)) { alert('请输入有效的增加额度'); return; }
+  handleUserAction(`${API}/api/admin/user/quota/increment`, { user_id: id, delta }, '✅ 配额增加成功');
+});
+document.getElementById('btnResetQuota').addEventListener('click', () => {
+  const id = parseInt(document.getElementById('userId').value);
+  const quota = parseInt(document.getElementById('resetQuota').value);
+  if (isNaN(quota)) { alert('请输入有效的重置额度'); return; }
+  handleUserAction(`${API}/api/admin/user/quota/reset`, { user_id: id, quota }, '✅ 配额重置成功');
+});
+
+if (adminToken) {
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+  loadSettings();
+}
+</script>
+</body>
+</html>
