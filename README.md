@@ -1,6 +1,5 @@
 # 项目标题
 
-[请在此处填写项目的一句话描述。]
 
 ## 目录
 
@@ -27,10 +26,8 @@
 
 ### 前提条件
 
-[请列出运行此项目所需的所有前提条件，例如：]
-- Node.js (版本 >= [版本号])
-- Python (版本 >= [版本号])
-- Docker
+- Python 
+
 
 ### 安装步骤
 
@@ -44,7 +41,7 @@
    ```
 3. 安装依赖：
    ```bash
-   [请填写安装依赖的命令，例如：npm install 或 pip install -r requirements.txt]
+   pip install fastapi uvicorn psycopg2-binary python-dotenv apscheduler && uvicorn main:app --host 0.0.0.0 --port 8000
    ```
 4. 配置环境变量：
    将 `.env.example` 文件复制为 `.env` 并填入所需的环境变量。
@@ -64,14 +61,13 @@
 
 ### API 文档
 
-如果您的项目提供 API，请在此处链接到 API 文档。
+-
 
 ## 技术栈
 
-[请列出项目使用的主要技术和框架。]
-- **前端：** 原生 JavaScript, HTML
-- **后端：** FastAPI (Python)
-- **数据库：** PostgreSQL, SQLite
+- **前端：** 原生 HTML
+- **后端：** Python
+- **数据库：** PostgreSQL
 - **定时任务：** APScheduler
 
 ## 贡献指南
